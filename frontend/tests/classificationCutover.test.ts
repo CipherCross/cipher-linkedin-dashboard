@@ -98,6 +98,9 @@ describe('reply-classification AI cutover', () => {
       reason: 'manual_review_required',
       demographics: { processed: 1, failed: 0 },
       step_attribution: { instances: 1, failed: 0 },
+      // No Airtable base is configured in the test env: the mirror phase reads
+      // nothing and touches no link.
+      airtable: { done: true, links: null },
     })
     expect(body).not.toHaveProperty('auto_advanced')
     expect(generateObject).toHaveBeenCalledTimes(1)

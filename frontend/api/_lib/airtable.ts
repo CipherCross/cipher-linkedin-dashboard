@@ -298,6 +298,45 @@ export async function findRecordsByFormula(
   return records
 }
 
+export interface AirtablePage {
+  records: AirtableRecord[]
+  offset: string | null
+}
+
+/**
+ * One page of a table, every field keyed by its NAME (the mirror stores the
+ * whole record as the team sees it). `offset` continues a previous page of the
+ * same formula; Airtable expires it after a few minutes, which surfaces as an
+ * `AirtableError` that `isExpiredOffset` recognizes.
+ */
+export async function listRecordsPage(
+  base: AirtableBaseId,
+  tableId: string,
+  options: { formula?: string; offset?: string | null } = {},
+): Promise<AirtablePage> {
+  const { baseId } = config(base)
+  const response = await airtableFetch<AirtableListResponse>(
+    base,
+    `/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}/listRecords`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        pageSize: 100,
+        ...(options.formula ? { filterByFormula: options.formula } : {}),
+        ...(options.offset ? { offset: options.offset } : {}),
+      }),
+    },
+  )
+  return { records: response.records ?? [], offset: response.offset ?? null }
+}
+
+/** Airtable's answer to a continuation offset that is no longer valid. */
+export function isExpiredOffset(error: unknown): boolean {
+  return error instanceof AirtableError
+    && error.status === 422
+    && /ITERAT|offset/i.test(error.message)
+}
+
 /**
  * A formula string literal. Backslashes and double quotes are escaped, control
  * characters become spaces, and the value is capped so one cell cannot inflate

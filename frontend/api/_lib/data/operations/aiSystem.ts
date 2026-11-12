@@ -87,6 +87,7 @@
  *   by side and picks one.
  */
 
+import { registerAirtableMirrorOperations } from './airtableMirror.js'
 import type {
   NeonCommandOperation,
   NeonOperationRegistry,
@@ -650,6 +651,9 @@ export function registerSystemOperations(
     SYSTEM_OPERATIONS.refreshStepAttribution,
     refreshStepAttributionOperation,
   )
+
+  // The daily cron's Airtable sync (ledger step 030); never a manual link.
+  registerAirtableMirrorOperations(registry, { manualLinks: false })
 
   return registerCronOperations(registry)
 }

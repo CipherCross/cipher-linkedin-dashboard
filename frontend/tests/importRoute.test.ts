@@ -180,6 +180,29 @@ describe('/api/import route method dispatch', () => {
     }
   })
 
+  it('keeps the Airtable mirror ops behind a session and POST-only', async () => {
+    // Any active member may sync or link (not admin-only), but never anonymously,
+    // and an unauthenticated caller never reaches Airtable or the database.
+    vi.stubEnv('NEON_DATABASE_URL', 'postgresql://nobody:nothing@127.0.0.1:1/nowhere')
+    const fetcher = vi.fn(async () => new Response('{}'))
+    vi.stubGlobal('fetch', fetcher)
+    try {
+      for (const op of ['airtable.sync', 'company.link']) {
+        const response = await POST(new Request(url(op), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ instance_id: 'nb', profile_url: 'u', base_key: 'web2mob', record_id: null }),
+        }))
+        expect(response.status).toBe(401)
+        expect((await GET(new Request(url(op)))).status).toBe(405)
+      }
+      expect(fetcher).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+      await resetDataStore()
+    }
+  })
+
   it('still answers an unknown operation before any authorization', async () => {
     for (const response of [await get('agent.nope'), await post('agent.nope')]) {
       expect(response.status).toBe(400)

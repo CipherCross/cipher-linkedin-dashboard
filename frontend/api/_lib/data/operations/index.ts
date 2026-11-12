@@ -114,6 +114,11 @@ import {
   upsertSiteOperation as coachContextUpsertSiteOperation,
 } from './coachContext.js'
 import {
+  AIRTABLE_MIRROR_COMMANDS,
+  AIRTABLE_MIRROR_OPERATIONS,
+  registerAirtableMirrorOperations,
+} from './airtableMirror.js'
+import {
   LEADS_OPERATIONS,
   leadNotesOperation,
   leadPhotoObjectsOperation,
@@ -325,6 +330,15 @@ export {
   type SchemaReportRow,
   type SiteSnapshotRow,
 } from './coachContext.js'
+export {
+  AIRTABLE_MIRROR_COMMANDS,
+  AIRTABLE_MIRROR_OPERATIONS,
+  type LinkRefreshResult,
+  type LinkRow,
+  type MirrorCompanyRow,
+  type MirrorContactRow,
+  type SyncStateRow,
+} from './airtableMirror.js'
 export {
   ROUTE_SNAPSHOT_OPERATION,
   ROUTE_SNAPSHOT_ROUTES,
@@ -827,6 +841,8 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   registry.registerCommand(COACH_CONTEXT_COMMANDS.upsertCompany, coachContextUpsertCompanyOperation)
   registry.registerCommand(COACH_CONTEXT_COMMANDS.upsertSite, coachContextUpsertSiteOperation)
   registry.registerCommand(COACH_CONTEXT_COMMANDS.saveOurCompany, coachContextSaveOurCompanyOperation)
+  // Ledger step 030 — the Airtable mirror and lead <-> company links.
+  registerAirtableMirrorOperations(registry, { manualLinks: true })
   // Ledger step 027 — the coach's versioned prompt and its training workspace.
   registry.registerQuery(COACH_TRAINING_OPERATIONS.promptState, coachTrainingPromptStateOperation)
   registry.registerQuery(COACH_TRAINING_OPERATIONS.versions, coachTrainingVersionsOperation)
@@ -1040,6 +1056,7 @@ export const APPLICATION_QUERY_OPERATIONS = [
   CONVERSATION_WRITE_OPERATIONS.threadDedupKeys,
   ...Object.values(COACH_TRAINING_OPERATIONS),
   ...Object.values(COACH_CONTEXT_OPERATIONS),
+  ...Object.values(AIRTABLE_MIRROR_OPERATIONS),
   AI_WRITE_OPERATIONS.coachThread,
   AI_WRITE_OPERATIONS.coachExisting,
   AI_WRITE_OPERATIONS.coachPlaybook,
@@ -1127,6 +1144,7 @@ export const APPLICATION_COMMAND_OPERATIONS = [
   SEQUENCE_PUBLISH_COMMANDS.createBranches,
   ...Object.values(COACH_TRAINING_COMMANDS),
   ...Object.values(COACH_CONTEXT_COMMANDS),
+  ...Object.values(AIRTABLE_MIRROR_COMMANDS),
   AI_WRITE_OPERATIONS.coachUpsert,
   AI_WRITE_OPERATIONS.coachDigestUpsert,
   AI_WRITE_OPERATIONS.classifyWriteGender,

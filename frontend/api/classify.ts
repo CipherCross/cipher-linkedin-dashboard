@@ -25,6 +25,7 @@ import { z } from 'zod'
 import { guardMachine, authorizationResponse } from './_lib/auth.js'
 import { unavailableResponse } from './_lib/data/availability.js'
 import { refreshStepAttribution } from './_lib/stepAttribution.js'
+import { syncAirtable, type AirtableSyncResult } from './_lib/airtableSync.js'
 import { getAiDataStore, SYSTEM_ACTOR } from './_lib/data/aiStore.js'
 import {
   DataStoreContractError,
@@ -125,10 +126,14 @@ async function handle(req: Request, deps: NeonWriteDeps = {}): Promise<Response>
       // The daily full pass of the message→step attribution cache (ledger step
       // 024): picks up edited templates the sync-ping incremental pass skips.
       const attribution = await refreshStepAttribution(true)
+      // The Airtable mirror and lead <-> company links (ledger step 030). An
+      // unfinished run resumes on the next cron or a member's Sync button.
+      const airtable = await runAirtableMirror()
       return json({
         ...REPLY_CLASSIFICATION_DISABLED,
         demographics,
         step_attribution: { instances: attribution.instances.length, failed: attribution.failed },
+        airtable,
       })
     } catch (error) {
       const unavailable = unavailableResponse(error)
@@ -139,6 +144,21 @@ async function handle(req: Request, deps: NeonWriteDeps = {}): Promise<Response>
   }
 
   return classifyOnNeon(req, mode, deps)
+}
+
+/** Budget for the cron's Airtable phase, after demographics and attribution. */
+const CRON_AIRTABLE_BUDGET_MS = 120_000
+
+async function runAirtableMirror(): Promise<AirtableSyncResult | { error: string }> {
+  try {
+    return await syncAirtable(
+      { store: getAiDataStore(), actor: SYSTEM_ACTOR },
+      { budgetMs: CRON_AIRTABLE_BUDGET_MS },
+    )
+  } catch (error) {
+    console.error('Airtable mirror phase failed:', safeErrorLabel(error))
+    return { error: safeErrorLabel(error) }
+  }
 }
 
 interface DemographicsRun {

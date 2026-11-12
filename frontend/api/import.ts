@@ -41,7 +41,15 @@ import {
 import { readDeploymentTenantId } from './_lib/agent/tenant.js'
 import { getMachineDataStore } from './_lib/data/machineStore.js'
 import { machineStoreConfigured } from './_lib/data/neonConfig.js'
-import { neonWriter } from './_lib/neonWrites.js'
+import { neonWriter, type NeonWriter } from './_lib/neonWrites.js'
+import {
+  AIRTABLE_SYNC_OP,
+  COMPANY_LINK_OP,
+  handleAirtableSync,
+  handleCompanyLink,
+} from './_lib/airtableSyncRoute.js'
+import { syncAirtable } from './_lib/airtableSync.js'
+import { DEFAULT_AIRTABLE_BASE, isAirtableBase } from '../src/lib/airtableBases.js'
 
 export const maxDuration = 60
 
@@ -145,6 +153,9 @@ async function handle(req: Request): Promise<Response> {
   if (op === AGENT_RELEASE_OP) return agentReleaseHandler()(req)
   if (op === AGENT_REFRESH_CANDIDATES_OP) return agentRefreshCandidatesHandler()(req)
   if ([AGENT_PUBLISH_PROBE_OP, AGENT_PUBLISH_CLAIM_OP, AGENT_PUBLISH_HEARTBEAT_OP, AGENT_PUBLISH_STATE_OP, AGENT_PUBLISH_BRANCH_OP, AGENT_PUBLISH_FINISH_OP, AGENT_PUBLISH_CANARY_CLAIM_OP, AGENT_PUBLISH_CANARY_RESULT_OP].includes(op)) return agentPublishHandler(op)(req)
+  // The Airtable mirror (ledger step 030): any active member, not admin-only.
+  if (op === AIRTABLE_SYNC_OP) return handleAirtableSync(req)
+  if (op === COMPANY_LINK_OP) return handleCompanyLink(req)
   if (op !== '') {
     return json({ error: `operation is not allowlisted: ${op}` }, 400)
   }
@@ -162,8 +173,9 @@ async function handle(req: Request): Promise<Response> {
     return json({ error: `${req.method} is not allowed` }, 405)
   }
 
+  let writer: NeonWriter
   try {
-    const writer = await neonWriter(req)
+    writer = await neonWriter(req)
     if (writer.actor.role !== 'admin') {
       throw new AuthorizationError(403, 'Admin access required')
     }
@@ -199,11 +211,11 @@ async function handle(req: Request): Promise<Response> {
 
   const action = typeof payload.action === 'string' ? payload.action : ''
   if (CONTACT_ACTIONS.has(action)) {
-    return handleContactImport(action, payload)
+    return afterCommit(action, payload, writer, await handleContactImport(action, payload))
   }
 
   if (COMPANY_ACTIONS.has(action)) {
-    return handleCompanyImport(action, payload)
+    return afterCommit(action, payload, writer, await handleCompanyImport(action, payload))
   }
 
   if (STATS_ACTIONS.has(action)) {
@@ -215,6 +227,33 @@ async function handle(req: Request): Promise<Response> {
   }
 
   return json({ error: 'unknown import action' }, 400)
+}
+
+/** Budget for the mirror refresh that follows a CSV commit. */
+const COMMIT_SYNC_BUDGET_MS = 15_000
+
+/**
+ * A committed CSV import refreshes the Airtable mirror of its base so the new
+ * contacts link to their leads without waiting for the daily cron. Best effort:
+ * the import already succeeded, and its response is returned unchanged.
+ */
+async function afterCommit(
+  action: string,
+  payload: Record<string, unknown>,
+  writer: NeonWriter,
+  response: Response,
+): Promise<Response> {
+  if ((action !== 'contact_commit' && action !== 'company_commit') || !response.ok) return response
+  const base = isAirtableBase(payload.base) ? payload.base : DEFAULT_AIRTABLE_BASE
+  try {
+    await syncAirtable(
+      { store: writer.store, actor: writer.actor },
+      { budgetMs: COMMIT_SYNC_BUDGET_MS, bases: [base] },
+    )
+  } catch (error) {
+    console.error('Airtable mirror refresh after import failed:', error instanceof Error ? error.name : 'UnknownError')
+  }
+  return response
 }
 
 // Both verbs, one dispatcher. `agent.config` and `agent.release` are GETs (the
