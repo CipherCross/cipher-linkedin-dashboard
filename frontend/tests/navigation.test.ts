@@ -38,10 +38,14 @@ describe('sidebar information architecture', () => {
       'Pipeline',
       'Leads',
       'Companies',
-      'CSV Import',
       'Chat',
     ])
     expect(primary?.collapsible).toBe(false)
+  })
+
+  it('keeps the admin-only CSV Import in Administration, so the rail fits 1280×720', () => {
+    const administration = NAVIGATION_SECTIONS.find((section) => section.id === 'administration')
+    expect(administration?.items.map((item) => item.label)).toEqual(['Team', 'CSV Import', 'Health'])
   })
 
   it('contains no persistent account or campaign navigation', () => {

@@ -146,11 +146,12 @@ Anyone holding the secret can read every lead and message.
 
 ## Pages
 
-- **Main**: Overview, Sequences, Follow-ups, Replies, Pipeline, Leads, CSV Import
-  (admin), Chat (AI copilot over read-only SQL).
-- **Strategy**: Review, Sentiment Analysis, Playbook, Searches.
-- **Administration**: Team, Health (sync runs, freshness, per-notebook Configure).
-- Drill-downs: `/campaign/:id`, `/account/:id`. ICP and Hypotheses are still routed
+- **Main**: Overview, Sequences, Follow-ups, Replies, Pipeline, Leads, Companies
+  (Airtable companies, countries, unlinked leads), Chat (AI copilot over read-only SQL).
+- **Strategy**: Review, Sentiment Analysis, Playbook, Coach training, Searches.
+- **Administration**: Team, CSV Import (admin), Health (sync runs, freshness,
+  per-notebook Configure).
+- Drill-downs: `/campaign/:id`, `/account/:id`, `/companies/:base/:recordId`. ICP and Hypotheses are still routed
   but off the navigation.
 
 Topline numbers come from server-side SQL; range- and subset-specific numbers are

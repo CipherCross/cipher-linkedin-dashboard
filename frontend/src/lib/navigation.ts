@@ -249,7 +249,6 @@ export const NAVIGATION_SECTIONS: NavigationSection[] = [
       inSection('primary', ITEMS.pipeline),
       inSection('primary', ITEMS.leads),
       inSection('primary', ITEMS.companies),
-      inSection('primary', ITEMS.csvImport),
       inSection('primary', ITEMS.chat),
     ],
   },
@@ -273,6 +272,9 @@ export const NAVIGATION_SECTIONS: NavigationSection[] = [
     placement: 'footer',
     items: [
       inSection('administration', ITEMS.team),
+      // Admin-only. Moved here from the primary list when Companies joined it,
+      // so the rail still fits 1280×720 with Strategy open.
+      inSection('administration', ITEMS.csvImport),
       inSection('administration', ITEMS.health),
     ],
   },
