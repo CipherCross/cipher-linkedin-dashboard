@@ -223,61 +223,27 @@ export interface LinkRefreshResult {
 }
 
 /**
- * Re-derives every 'contact_slug' link. A person matching contacts in two
- * bases takes the most recently modified contact. Manual links are never
- * touched (the ON CONFLICT update is gated on the stored method). A link whose
- * contact no longer matches is left as it was: nothing here deletes.
+ * Re-derives every 'contact_slug' link through the definer function of ledger
+ * step 031, which authorizes the caller once and runs as the owner. Run as the
+ * caller, the same query re-checked RLS on every row and outran the runtime's
+ * statement timeout on production. The rule (in the function): a person
+ * matching contacts in two bases takes the most recently modified contact;
+ * manual links are never touched; nothing is deleted.
  */
 export const refreshLinksOperation: NeonCommandOperation<LinkRefreshResult> = {
   build: () => ({
-    text: `WITH people AS (
-             SELECT DISTINCT l.instance_id, l.profile_url FROM public.leads l
-           ), keyed AS (
-             SELECT p.instance_id, p.profile_url, public.linkedin_slug(p.profile_url) AS slug
-               FROM people p
-           ), matched AS (
-             SELECT DISTINCT ON (k.instance_id, k.profile_url)
-                    k.instance_id, k.profile_url, c.base_key, c.company_record_id,
-                    c.record_id AS contact_record_id
-               FROM keyed k
-               JOIN public.airtable_contacts c ON c.persona_slug = k.slug
-               JOIN public.airtable_companies co
-                 ON co.base_key = c.base_key AND co.record_id = c.company_record_id
-              WHERE k.slug IS NOT NULL AND c.company_record_id IS NOT NULL
-              ORDER BY k.instance_id, k.profile_url, c.airtable_modified DESC NULLS LAST,
-                       c.base_key, c.record_id
-           ), written AS (
-             INSERT INTO public.lead_company_links
-                    (instance_id, profile_url, base_key, company_record_id, contact_record_id,
-                     method, linked_at)
-             SELECT m.instance_id, m.profile_url, m.base_key, m.company_record_id,
-                    m.contact_record_id, 'contact_slug', now()
-               FROM matched m
-             ON CONFLICT (instance_id, profile_url) DO UPDATE SET
-               base_key = EXCLUDED.base_key, company_record_id = EXCLUDED.company_record_id,
-               contact_record_id = EXCLUDED.contact_record_id, linked_at = now()
-             WHERE public.lead_company_links.method = 'contact_slug'
-               AND (public.lead_company_links.base_key, public.lead_company_links.company_record_id,
-                    public.lead_company_links.contact_record_id)
-                   IS DISTINCT FROM (EXCLUDED.base_key, EXCLUDED.company_record_id,
-                                     EXCLUDED.contact_record_id)
-             RETURNING 1
-           )
-           SELECT (SELECT count(*) FROM people)::int AS leads,
-                  (SELECT count(*) FROM matched)::int AS matched,
-                  (SELECT count(*) FROM written)::int AS changed,
-                  -- The statement's snapshot predates its own inserts, so count the
-                  -- union: every match ends up linked (or already was).
-                  (SELECT count(*) FROM (SELECT instance_id, profile_url FROM public.lead_company_links
-                                         UNION SELECT instance_id, profile_url FROM matched) x)::int AS linked`,
+    text: 'SELECT public.refresh_lead_company_links() AS result',
     values: [],
   }),
-  mapResult: (rows) => ({
-    leads: Number(rows[0]?.leads ?? 0),
-    matched: Number(rows[0]?.matched ?? 0),
-    changed: Number(rows[0]?.changed ?? 0),
-    linked: Number(rows[0]?.linked ?? 0),
-  }),
+  mapResult: (rows) => {
+    const result = (rows[0]?.result ?? {}) as Record<string, unknown>
+    return {
+      leads: Number(result.leads ?? 0),
+      matched: Number(result.matched ?? 0),
+      changed: Number(result.changed ?? 0),
+      linked: Number(result.linked ?? 0),
+    }
+  },
 }
 
 export interface ManualLinkParams {

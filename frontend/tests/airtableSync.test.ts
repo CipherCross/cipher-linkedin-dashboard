@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 import {
   cellInt,
   cellText,
@@ -235,11 +236,18 @@ describe('mirror SQL', () => {
       .toContain('public.linkedin_slug(r.persona_url)')
   })
 
-  it('never re-points a manual link and prefers the most recently modified contact', () => {
-    const text = refreshLinksOperation.build({ ...ctx, params: undefined }).text
-    expect(text).toContain("WHERE public.lead_company_links.method = 'contact_slug'")
-    expect(text).toContain('c.airtable_modified DESC NULLS LAST')
-    expect(text).not.toMatch(/\bDELETE\b/)
+  it('refreshes links through the step 031 definer function and reads its counts', () => {
+    expect(refreshLinksOperation.build({ ...ctx, params: undefined }).text)
+      .toBe('SELECT public.refresh_lead_company_links() AS result')
+    expect(refreshLinksOperation.mapResult?.([{ result: { leads: 9204, matched: 6260, changed: 6260, linked: 6260 } }], 1))
+      .toEqual({ leads: 9204, matched: 6260, changed: 6260, linked: 6260 })
+  })
+
+  it('keeps the link rule in step 031: manual links survive, newest contact wins, nothing is deleted', () => {
+    const sql = readFileSync(new URL('../../postgres/tenant-baseline/v1/031_lead_company_link_refresh.sql', import.meta.url), 'utf8')
+    expect(sql).toContain("where link.method = 'contact_slug'")
+    expect(sql).toContain('c.airtable_modified desc nulls last')
+    expect(sql).not.toMatch(/\bdelete\b/i)
   })
 
   it('records the acting member on a manual link and clears only manual links', () => {
