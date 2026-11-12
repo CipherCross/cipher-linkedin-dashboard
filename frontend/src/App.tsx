@@ -20,6 +20,8 @@ const Overview = lazy(() => import('./pages/Overview').then((m) => ({ default: m
 const CampaignDetail = lazy(() => import('./pages/CampaignDetail').then((m) => ({ default: m.CampaignDetail })))
 const AccountDetail = lazy(() => import('./pages/AccountDetail').then((m) => ({ default: m.AccountDetail })))
 const LeadsExplorer = lazy(() => import('./pages/LeadsExplorer').then((m) => ({ default: m.LeadsExplorer })))
+const Companies = lazy(() => import('./pages/Companies').then((m) => ({ default: m.Companies })))
+const CompanyDetail = lazy(() => import('./pages/CompanyDetail').then((m) => ({ default: m.CompanyDetail })))
 const Pipeline = lazy(() => import('./pages/Pipeline').then((m) => ({ default: m.Pipeline })))
 const FollowUps = lazy(() => import('./pages/FollowUps').then((m) => ({ default: m.FollowUps })))
 const Playbook = lazy(() => import('./pages/Playbook').then((m) => ({ default: m.Playbook })))
@@ -87,6 +89,8 @@ export default function App() {
                     <Route path={APP_ROUTE_SEGMENTS.accountsRedirect} element={<Navigate to="/" replace />} />
                     <Route path={APP_ROUTE_SEGMENTS.account} element={<AccountDetail />} />
                     <Route path={APP_ROUTE_SEGMENTS.leads} element={<LeadsExplorer />} />
+                    <Route path={APP_ROUTE_SEGMENTS.companies} element={<Companies />} />
+                    <Route path={APP_ROUTE_SEGMENTS.company} element={<CompanyDetail />} />
                     <Route path={APP_ROUTE_SEGMENTS.pipeline} element={<Pipeline />} />
                     <Route path={APP_ROUTE_SEGMENTS.followUps} element={<FollowUps />} />
                     <Route path={APP_ROUTE_SEGMENTS.replies} element={<Replies />} />

@@ -7,6 +7,7 @@ import { useData } from '../../lib/DataContext'
 import { useToast } from '../../lib/ToastContext'
 import { usePipelineActions } from '../../lib/usePipelineActions'
 import { ageRange } from '../../lib/leads'
+import { companyHref, locationLine, type LeadCompanyLink } from '../../lib/companies'
 import { PIPELINE_STAGES, stageById, substatusLabel } from '../../lib/pipeline'
 import type { Gender, Instance, Lead } from '../../lib/types'
 import { Badge, SelectField } from '../../ui'
@@ -35,6 +36,7 @@ export function LeadContextPanel({
   accountLabel,
   status,
   onLinkClick,
+  companyInfo = null,
   onRequestLost,
   onNoteDirtyChange,
 }: {
@@ -48,6 +50,8 @@ export function LeadContextPanel({
   /** Reply status badges. */
   status: ReactNode
   onLinkClick: (to: string) => (event: MouseEvent) => void
+  /** The lead's location and Airtable company link, once read. */
+  companyInfo?: LeadCompanyLink | null
   onRequestLost: () => void
   onNoteDirtyChange: (dirty: boolean) => void
 }) {
@@ -151,6 +155,29 @@ export function LeadContextPanel({
               </span>
             )}
           </dd>
+          {companyInfo?.company_link && (
+            <>
+              <dt>Company</dt>
+              <dd>
+                <Link
+                  className="text-app-accent no-underline hover:underline [overflow-wrap:anywhere]"
+                  to={companyHref(companyInfo.company_link)}
+                  onClick={onLinkClick(companyHref(companyInfo.company_link))}
+                  title={companyInfo.company_link.method === 'manual' ? 'Linked by hand' : 'Linked through the Airtable contact'}
+                >
+                  {companyInfo.company_link.name || 'Airtable company'}
+                </Link>
+              </dd>
+            </>
+          )}
+          {(companyInfo?.location || companyInfo?.country_code) && (
+            <>
+              <dt>Location</dt>
+              <dd className="[overflow-wrap:anywhere]">
+                {locationLine(companyInfo.location, companyInfo.country_code)}
+              </dd>
+            </>
+          )}
           <dt>Reply</dt>
           <dd className="flex flex-wrap gap-app-xs">{status}</dd>
         </dl>

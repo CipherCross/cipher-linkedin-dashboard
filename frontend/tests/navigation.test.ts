@@ -37,6 +37,7 @@ describe('sidebar information architecture', () => {
       'Replies',
       'Pipeline',
       'Leads',
+      'Companies',
       'CSV Import',
       'Chat',
     ])
@@ -72,6 +73,9 @@ describe('sidebar information architecture', () => {
   it('derives titles, active matching, and loading shapes from one registry', () => {
     expect(pageNameForPath('/')).toBe('Overview')
     expect(pageNameForPath('/leads/anything')).toBe('Leads')
+    expect(pageNameForPath('/companies')).toBe('Companies')
+    expect(pageNameForPath('/companies/web2mob/recAAAAAAAAAAAAAA')).toBe('Companies')
+    expect(skeletonVariantForPath('/companies')).toBe('table')
     expect(pageNameForPath('/account/notebook-1')).toBeNull()
     expect(skeletonVariantForPath('/follow-ups')).toBe('table')
     expect(skeletonVariantForPath('/playbook')).toBe('simple')

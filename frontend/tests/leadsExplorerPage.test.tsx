@@ -25,6 +25,21 @@ const replies = vi.hoisted(() => ({
   value: {} as Record<string, { body: string; sentiment: string; sent_at: string; reason: null }>,
   intents: {} as Record<string, string>,
 }))
+const links = vi.hoisted(() => ({ value: {} as Record<string, unknown> }))
+vi.mock('../src/lib/companies', async () => {
+  const actual = await vi.importActual<typeof import('../src/lib/companies')>('../src/lib/companies')
+  return {
+    ...actual,
+    fetchCountriesFunnel: vi.fn(async () => ({
+      axis: 'lead',
+      rows: [
+        { iso2: 'PT', name: 'Portugal', region: 'Europe', people: 3 },
+        { iso2: null, name: 'Unknown', region: null, people: 1 },
+      ],
+      unresolved: [], totals: {}, unlinked_people: 0,
+    })),
+  }
+})
 vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonCoachingDigests: vi.fn(async () => []),
   fetchNeonLeadsSearchPage: vi.fn(async (query: { q?: string }) => {
@@ -36,6 +51,7 @@ vi.mock('../src/lib/dashboardReads', () => ({
         reply: replies.value[lead.id] ?? null,
         highestIntent: replies.intents[lead.id] ?? null,
         followUp: null,
+        company_link: links.value[lead.id] ?? null,
       })),
       total: matched.length,
       allTotal: leads.value.length,
@@ -115,6 +131,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   replies.value = {}
   replies.intents = {}
+  links.value = {}
   data.value = dataWith([
     lead({}),
     lead({ id: 'l2', profile_url: 'https://www.linkedin.com/in/bob', full_name: 'Bob Babbage', assigned_to: 7 }),
@@ -273,5 +290,46 @@ describe('the lead and reply columns', () => {
 
     const bob = screen.getByRole('button', { name: 'Open conversation with Bob Babbage' }).closest('tr')!
     expect(bob.querySelectorAll('td')[1].textContent).toBe('—')
+  })
+})
+
+describe('country and company', () => {
+  it("shows the lead's Airtable company as a link, LinkedIn's company beneath it, and the country", async () => {
+    links.value = {
+      l1: { base_key: 'web2mob', record_id: 'recAAAAAAAAAAAAAA', name: 'Engines Ltd', method: 'contact_slug' },
+    }
+    data.value = dataWith([
+      lead({ location: 'Lisbon, Portugal', country_code: 'PT' }),
+      lead({ id: 'l2', profile_url: 'https://www.linkedin.com/in/bob', full_name: 'Bob Babbage', company: null }),
+    ])
+    await paint()
+    const table = screen.getByRole('table', { name: 'Leads' })
+    expect(within(table).getByRole('columnheader', { name: 'Company' })).toBeTruthy()
+    expect(within(table).getByRole('columnheader', { name: 'Country' })).toBeTruthy()
+    const company = within(table).getByRole('link', { name: 'Engines Ltd' })
+    expect(company.getAttribute('href')).toBe('/companies/web2mob/recAAAAAAAAAAAAAA')
+    fireEvent.click(company)
+    expect(openConversation).not.toHaveBeenCalled()
+    expect(within(table).getByText('Portugal')).toBeTruthy()
+  })
+
+  it('filters by country from the sheet and names it in the chip', async () => {
+    await paint()
+    fireEvent.click(screen.getByRole('button', { name: /Filters/ }))
+    const sheet = screen.getByRole('dialog', { name: 'Filters' })
+    const select = within(sheet).getByLabelText('Country')
+    await act(async () => {})
+    expect(within(select).getByRole('option', { name: 'Portugal (3)' })).toBeTruthy()
+    fireEvent.change(select, { target: { value: 'PT' } })
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Apply' }))
+    expect(new URLSearchParams(search() ?? '').get('country')).toBe('PT')
+    await act(async () => {})
+    expect(fetchPage).toHaveBeenLastCalledWith(expect.objectContaining({ country: 'PT' }))
+    expect(screen.getByText('Portugal', { selector: '.ui-active-filter *' })).toBeTruthy()
+  })
+
+  it('ignores a country in the URL that is not a code', async () => {
+    await paint('/leads?country=Portugal')
+    expect(fetchPage).toHaveBeenLastCalledWith(expect.objectContaining({ country: 'all' }))
   })
 })

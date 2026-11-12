@@ -412,7 +412,8 @@ export async function syncAirtable(
       continue
     }
     if (now() >= deadline) {
-      bases.push({ base, configured: true, error: 'not reached within the time budget' })
+      // Not an error: the next call reaches it.
+      bases.push({ base, configured: true })
       done = false
       continue
     }

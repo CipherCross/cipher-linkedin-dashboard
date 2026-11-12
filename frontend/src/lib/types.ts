@@ -383,11 +383,21 @@ export interface LeadsSearchReply {
   sent_at: string
 }
 
+/** The Airtable company a lead is written to for (ledger step 030). */
+export interface CompanyLinkRef {
+  base_key: string
+  record_id: string
+  name: string | null
+  method: 'contact_slug' | 'manual'
+}
+
 export interface LeadsSearchItem {
   lead: Lead
   reply: LeadsSearchReply | null
   highestIntent: ReplyIntent | null
   followUp: FollowUpState | null
+  /** Absent from a server older than step 030; null when the lead is unlinked. */
+  company_link?: CompanyLinkRef | null
 }
 
 export interface LeadsSearchPage {
@@ -458,6 +468,11 @@ export interface Lead {
    * only through authenticated/signed delivery; never an inference input. */
   photo_path?: string | null
   photo_synced_at?: string | null
+  // --- Location (ledger step 030) ---------------------------------------------
+  // LH2's free-text location and the ISO alpha-2 resolved from it. Carried by
+  // leads.searchPage rows; the directory read does not select them.
+  location?: string | null
+  country_code?: string | null
 }
 
 /** A named, shareable sourcing search (Apollo / Sales Navigator / esun / …).

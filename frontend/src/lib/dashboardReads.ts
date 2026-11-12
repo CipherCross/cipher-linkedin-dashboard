@@ -89,6 +89,12 @@ export const READ_OPS = {
   annotations: 'annotations.timeline',
   leads: 'leads.directory',
   leadsSearchPage: 'leads.searchPage',
+  /** The Companies page — read through `lib/companies.ts`. */
+  companiesSearchPage: 'companies.searchPage',
+  companyDetail: 'companies.detail',
+  companiesUnlinked: 'companies.unlinked',
+  leadCompanyLink: 'companies.leadLink',
+  countriesFunnel: 'countries.funnel',
   inboundMessages: 'messages.inboundHistory',
   outboundMessages: 'messages.outboundRecent',
   pipelineEvents: 'pipeline.eventLog',
@@ -725,6 +731,11 @@ export interface LeadsSearchQuery {
   readonly today: string
   readonly page: number
   readonly pageSize?: number
+  /** ISO alpha-2 or `unknown`; absent or `all` is no filter. */
+  readonly country?: string
+  /** The linked Airtable company, both halves or neither. */
+  readonly companyBase?: string | null
+  readonly companyRecordId?: string | null
 }
 
 /** One exact Leads/Replies explorer page; no tenant-wide relation walks. */
@@ -753,6 +764,9 @@ export async function fetchNeonLeadsSearchPage(
       today: query.today,
       page: query.page,
       page_size: query.pageSize ?? 50,
+      country: !query.country || query.country === 'all' ? null : query.country,
+      company_base: query.companyBase ?? null,
+      company_record_id: query.companyRecordId ?? null,
       limit: 1,
     },
     fetchImpl,

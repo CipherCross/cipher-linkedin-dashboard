@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  CalendarCheck2, Check, ExternalLink, MessagesSquare, Pencil, Sparkles, Trash2, X,
+  Building2, CalendarCheck2, Check, ExternalLink, MessagesSquare, Pencil, Sparkles, Trash2, X,
 } from 'lucide-react'
 import { authPost } from '../lib/api'
 import { fetchNeonThread } from '../lib/dashboardReads'
+import { companyHref, fetchLeadCompanyLink, type LeadCompanyLink } from '../lib/companies'
 import { useData } from '../lib/DataContext'
 import { withLeadEdits } from '../lib/leadEdits'
 import { useToast } from '../lib/ToastContext'
@@ -188,6 +189,26 @@ export function ConversationDrawer({
     if (!lead) return
     loadFollowUpState(lead.instance_id, lead.profile_url).catch(() => {})
   }, [lead?.instance_id, lead?.profile_url, loadFollowUpState])
+
+  // Where the lead is and which Airtable company they are written to for. Its
+  // own small read: Leads, Replies and Pipeline all open this workspace, and
+  // only the Leads rows carry the link. A failure hides the company and the
+  // location rather than blocking the conversation.
+  const [companyInfo, setCompanyInfo] = useState<LeadCompanyLink | null>(null)
+  useEffect(() => {
+    setCompanyInfo(null)
+    if (!lead) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const info = await fetchLeadCompanyLink(lead.instance_id, lead.profile_url)
+        if (!cancelled) setCompanyInfo(info)
+      } catch {
+        if (!cancelled) setCompanyInfo(null)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [lead?.instance_id, lead?.profile_url])
 
   // Fetch the full thread whenever the active lead changes (or an import lands).
   useEffect(() => {
@@ -392,6 +413,18 @@ export function ConversationDrawer({
           >
             LinkedIn
           </ExternalLinkButton>
+          {companyInfo?.company_link && (
+            <LinkButton
+              variant="ghost"
+              size="sm"
+              icon={<Building2 aria-hidden="true" />}
+              to={companyHref(companyInfo.company_link)}
+              onClick={guardedLinkClick(companyHref(companyInfo.company_link))}
+              title={companyInfo.company_link.name ?? undefined}
+            >
+              Open company
+            </LinkButton>
+          )}
           {rows && rows.length > 0 && (
             <LinkButton
               variant="ghost"
@@ -446,6 +479,7 @@ export function ConversationDrawer({
             accountLabel={accountLabel}
             status={status}
             onLinkClick={guardedLinkClick}
+            companyInfo={companyInfo}
             onRequestLost={() => setPendingLost(true)}
             onNoteDirtyChange={setNoteDirty}
           />

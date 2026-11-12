@@ -33,6 +33,11 @@ vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonFollowUpHistory: vi.fn(async () => ({ events: [], nextCursor: null, hasMore: false })),
   resolvePhotoPath: async () => 'disabled',
 }))
+const fetchLeadCompanyLink = vi.fn(async (): Promise<unknown> => null)
+vi.mock('../src/lib/companies', async () => {
+  const actual = await vi.importActual<typeof import('../src/lib/companies')>('../src/lib/companies')
+  return { ...actual, fetchLeadCompanyLink: (...a: unknown[]) => fetchLeadCompanyLink(...(a as [])) }
+})
 vi.mock('../src/lib/replyReview', async () => {
   const actual = await vi.importActual<typeof import('../src/lib/replyReview')>('../src/lib/replyReview')
   return {
@@ -231,6 +236,27 @@ describe('the conversation drawer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await act(async () => {})
     expect(saveReview).toHaveBeenLastCalledWith(expect.objectContaining({ expected_review_revision: 4 }))
+  })
+
+  it("links to the lead's Airtable company and shows where the lead is", async () => {
+    fetchLeadCompanyLink.mockResolvedValueOnce({
+      location: 'Lisbon, Portugal', country_code: 'PT', country_name: 'Portugal',
+      company_link: { base_key: 'web2mob', record_id: 'recAAAAAAAAAAAAAA', name: 'Engines Ltd', method: 'contact_slug' },
+    })
+    await paint()
+    expect(fetchLeadCompanyLink).toHaveBeenCalledWith(LEAD.instance_id, LEAD.profile_url)
+    const dialog = screen.getByRole('dialog', { name: 'Ada Lovelace' })
+    const open = await within(dialog).findByRole('link', { name: 'Open company' })
+    expect(open.getAttribute('href')).toBe('/companies/web2mob/recAAAAAAAAAAAAAA')
+    const context = within(dialog).getByRole('region', { name: 'Context' })
+    expect(within(context).getByRole('link', { name: 'Engines Ltd' }).getAttribute('href'))
+      .toBe('/companies/web2mob/recAAAAAAAAAAAAAA')
+    expect(within(context).getByText('Lisbon, Portugal')).toBeTruthy()
+  })
+
+  it('offers no company when the lead is not linked', async () => {
+    await paint()
+    expect(screen.queryByRole('link', { name: 'Open company' })).toBeNull()
   })
 
   it('lays the conversation out in three panes: context, conversation, actions', async () => {

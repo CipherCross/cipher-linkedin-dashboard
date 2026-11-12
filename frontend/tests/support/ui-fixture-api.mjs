@@ -125,6 +125,85 @@ function leadRows(scenario) {
   }]
 }
 
+/* Companies (ledger step 030): the fixture lead is linked to one Airtable
+ * company by its contact slug; a second company has no linked people. */
+const FIXTURE_COMPANY_LINK = { base_key: 'web2mob', record_id: 'recFixture0000001', name: 'Fixture Labs', method: 'contact_slug' }
+
+function companyRows(scenario) {
+  if (isEmpty(scenario)) return []
+  return [{
+    base_key: 'web2mob', record_id: 'recFixture0000001', name: 'Fixture Labs', website: 'https://fixture.test',
+    domain: 'fixture.test', linkedin_url: 'https://www.linkedin.com/company/fixture-labs', hq_country: 'Portugal',
+    country_code: 'PT', country_name: 'Portugal', industry: 'Software', employees: 42, ai_niche: 'Sales tooling',
+    approve_status: 'Approve', leads: 1, invited: 1, connected: 1, accepted_of_invited: 1, first_message: 1,
+    replied: 1, p3: 0, last_activity: '2026-09-21T12:00:00.000Z', accounts: 1, accept_rate: 1,
+  }, {
+    base_key: 'healthcare_services', record_id: 'recFixture0000002', name: 'Quill Care', website: 'https://quill.test',
+    domain: 'quill.test', linkedin_url: null, hq_country: 'Somewhere Remote', country_code: null, country_name: null,
+    industry: 'Healthcare', employees: null, ai_niche: null, approve_status: 'New', leads: 0, invited: 0,
+    connected: 0, accepted_of_invited: 0, first_message: 0, replied: 0, p3: 0, last_activity: null, accounts: 0,
+    accept_rate: null,
+  }]
+}
+
+function companiesPage(scenario, search) {
+  const scope = search.get('scope') ?? 'linked'
+  const q = (search.get('q') ?? '').toLowerCase()
+  const country = search.get('country')
+  const scoped = companyRows(scenario).filter((row) => scope === 'all' || row.leads > 0)
+  const items = scoped.filter((row) =>
+    (!q || `${row.name} ${row.domain}`.toLowerCase().includes(q)) &&
+    (!country || (country === 'unknown' ? row.country_code === null : row.country_code === country)))
+  const facet = (key, label = (row) => row[key]) => [...new Map(scoped.filter((row) => row[key] != null)
+    .map((row) => [row[key], { value: row[key], label: label(row), count: scoped.filter((r) => r[key] === row[key]).length }])).values()]
+  return {
+    items, total: items.length, allTotal: scoped.length,
+    facets: {
+      countries: facet('country_code', (row) => row.country_name),
+      industries: facet('industry'), bases: facet('base_key'), approveStatuses: facet('approve_status'),
+    },
+  }
+}
+
+function companyDetail(scenario, base, recordId) {
+  const row = companyRows(scenario).find((company) => company.base_key === base && company.record_id === recordId)
+  if (!row) return null
+  return {
+    ...row, founded_year: 2019, description: 'Fixture Labs builds synthetic data for dashboards. '.repeat(8).trim(),
+    summary: null, keywords: 'fixtures, testing', web_app_link: null, airtable_created: '2026-01-01T00:00:00.000Z',
+    airtable_modified: '2026-09-01T00:00:00.000Z', synced_at: '2026-09-22T08:00:00.000Z', maturing: 0,
+    fields: {
+      'Company Name': row.name, Website: row.website, 'HQ country': row.hq_country, Industry: row.industry,
+      '# Employees': row.employees, 'AI niche': row.ai_niche, 'Approve status': row.approve_status,
+      Keywords: ['fixtures', 'testing'], Verified: true,
+      Logo: [{ url: 'https://fixture.test/logo.png', filename: 'logo.png' }],
+      Description: 'Fixture Labs builds synthetic data for dashboards. '.repeat(8).trim(),
+    },
+  }
+}
+
+function countriesFunnel(scenario, search) {
+  const axis = search.get('axis') === 'company' ? 'company' : 'lead'
+  const placed = isEmpty(scenario) ? [] : [
+    { iso2: 'PT', name: 'Portugal', region: 'Europe', people: 1, invited: 1, accepted: 1, replied: 1, p3: 0, companies: 1, maturing: 0, accept_rate: 1, reply_rate: 1, p3_rate: 0, maturing_share: 0, maturing_flag: false },
+    { iso2: null, name: 'Unknown', region: null, people: 1, invited: 1, accepted: 0, replied: 0, p3: 0, companies: 0, maturing: 1, accept_rate: 0, reply_rate: 0, p3_rate: 0, maturing_share: 1, maturing_flag: true },
+  ]
+  return {
+    axis, rows: placed, unresolved: isEmpty(scenario) ? [] : [{ value: 'Somewhere Remote', people: 1, companies: 1 }],
+    totals: { people: placed.length, invited: placed.length, accepted: 1, replied: 1, p3: 0, maturing: 1 },
+    unlinked_people: axis === 'company' && !isEmpty(scenario) ? 1 : 0,
+  }
+}
+
+function unlinkedPage(scenario) {
+  const items = isEmpty(scenario) ? [] : [{
+    instance_id: instance.id, profile_url: 'https://example.test/unlinked-lead', full_name: 'Robin Unlinked',
+    headline: 'Head of Operations', company: 'Harbor Analytics', country_code: 'GB', location: 'London, United Kingdom',
+    invited: true, replied: false, last_action_at: '2026-09-19T12:00:00.000Z', campaigns: [campaign.campaign_name],
+  }]
+  return { items, total: items.length, allTotal: items.length }
+}
+
 function messageRows(scenario) {
   if (isEmpty(scenario)) return []
   return [{
@@ -743,7 +822,7 @@ export async function activityFixture(request) {
   if (op === 'leads.searchPage') {
     // Keep this first list smoke exact and small. Other filter semantics remain
     // unsupported until a matching synthetic projection is implemented.
-    const supported = new Set(['op', 'limit', 'instance_id', 'camp', 'q', 'sort', 'dir', 'today', 'page', 'page_size'])
+    const supported = new Set(['op', 'limit', 'instance_id', 'camp', 'q', 'sort', 'dir', 'today', 'page', 'page_size', 'country', 'company_base', 'company_record_id'])
     if ([...url.searchParams.keys()].some((key) => !supported.has(key))) {
       return json({ error: 'Fixture lead filter is unsupported', operation: op }, 501)
     }
@@ -751,8 +830,10 @@ export async function activityFixture(request) {
     const rows = leadRows(scenario).filter((lead) =>
       (!url.searchParams.get('instance_id') || lead.instance_id === url.searchParams.get('instance_id')) &&
       (!url.searchParams.get('camp') || lead.campaign_id === url.searchParams.get('camp')) &&
-      (!query || `${lead.full_name} ${lead.headline} ${lead.company}`.toLowerCase().includes(query)),
-    )
+      (!query || `${lead.full_name} ${lead.headline} ${lead.company}`.toLowerCase().includes(query)) &&
+      (!url.searchParams.get('country') || url.searchParams.get('country') === 'PT') &&
+      (!url.searchParams.get('company_record_id') || url.searchParams.get('company_record_id') === FIXTURE_COMPANY_LINK.record_id),
+    ).map((lead) => ({ ...lead, location: 'Lisbon, Portugal', country_code: 'PT' }))
     const offset = Math.max(0, Number(url.searchParams.get('page') ?? 0)) * Math.max(1, Number(url.searchParams.get('page_size') ?? 50))
     const size = Math.max(1, Number(url.searchParams.get('page_size') ?? 50))
     const items = rows.slice(offset, offset + size).map((lead) => ({
@@ -762,13 +843,24 @@ export async function activityFixture(request) {
         intent_level: 'p2', intent_reason: null, highest_intent: 'p2',
         sent_at: messageRows(scenario)[0].sent_at,
       },
-      highestIntent: 'p2', followUp: null,
+      highestIntent: 'p2', followUp: null, company_link: FIXTURE_COMPANY_LINK,
     }))
     return json(page([{
       items, total: rows.length, allTotal: leadRows(scenario).length,
       replyCounts: { total: rows.length, c: rows.length ? { positive: rows.length } : {} },
     }]))
   }
+  if (op === 'companies.searchPage') return json(page([companiesPage(scenario, url.searchParams)]))
+  if (op === 'companies.detail') {
+    const row = companyDetail(scenario, url.searchParams.get('base'), url.searchParams.get('record_id'))
+    return json(page(row ? [row] : []))
+  }
+  if (op === 'companies.unlinked') return json(page([unlinkedPage(scenario)]))
+  if (op === 'companies.leadLink') {
+    const lead = leadRows(scenario).find((row) => row.profile_url === url.searchParams.get('profile_url'))
+    return json(page(lead ? [{ location: 'Lisbon, Portugal', country_code: 'PT', country_name: 'Portugal', company_link: FIXTURE_COMPANY_LINK }] : []))
+  }
+  if (op === 'countries.funnel') return json(page([countriesFunnel(scenario, url.searchParams)]))
   if (op === 'activity.dailySeries') return json(page([]))
   if (op === 'sequences.hub') return json(page([sequenceHub(scenario)]))
   if (op === 'replies.analytics') return json(page([repliesAnalytics(scenario)]))
@@ -871,6 +963,10 @@ function fixtureImportStats(body) {
 export async function importFixture(request) {
   const scenario = await currentScenario()
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
+  // The Airtable sync and the manual company link both write; like every
+  // fixture write they are refused, so the Companies page shows its error path.
+  const importOp = new URL(request.url).searchParams.get('op')
+  if (importOp === 'airtable.sync' || importOp === 'company.link') return mutationRefusal()
   if (scenario === 'error' || scenario === 'read-error') return json({ error: 'Fixture import read failure' }, 503)
   const body = await request.json().catch(() => ({}))
   const metadata = { target: body.action === 'company_metadata' ? 'db' : 'contacts', base: body.base ?? 'web2mob', addedBy: ['Fixture Admin'], limits: { maxRows: 500, maxFileBytes: 5000000 } }

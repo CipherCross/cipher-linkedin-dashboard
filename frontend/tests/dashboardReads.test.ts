@@ -126,9 +126,9 @@ describe('the read vocabulary', () => {
     expect(called).toEqual(allowlisted)
   })
 
-  it('names thirty-five reads including the four narrow Overview contracts and the campaign preview', () => {
-    expect(Object.values(READ_OPS)).toHaveLength(35)
-    expect(new Set(Object.values(READ_OPS)).size).toBe(35)
+  it('names forty reads including the four narrow Overview contracts, the campaign preview and the five Companies reads', () => {
+    expect(Object.values(READ_OPS)).toHaveLength(40)
+    expect(new Set(Object.values(READ_OPS)).size).toBe(40)
   })
 
   it('does not treat the flag lookup as a read', () => {
@@ -355,6 +355,12 @@ describe('the dashboard load', () => {
       READ_OPS.routeSnapshot,
       READ_OPS.sequenceHub,
       READ_OPS.leadsSearchPage,
+      // The Companies page and the conversation's company link read their own.
+      READ_OPS.companiesSearchPage,
+      READ_OPS.companyDetail,
+      READ_OPS.companiesUnlinked,
+      READ_OPS.leadCompanyLink,
+      READ_OPS.countriesFunnel,
       READ_OPS.thread,
       READ_OPS.leadNotes,
       READ_OPS.followUpHistory,

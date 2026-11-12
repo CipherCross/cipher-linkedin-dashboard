@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   ChevronDown, ChevronRight, Columns3, Download, Filter, GraduationCap, SearchX, Sparkles,
 } from 'lucide-react'
@@ -24,6 +24,8 @@ import { COPY } from '../ui/labels'
 import { LeadMilestoneBadge, LeadReplyBadges, LeadReplyIdentity } from '../components/leads-and-replies/LeadReplyIdentity'
 import { LostReasonModal } from '../components/LostReasonModal'
 import { RowOpenButton } from '../components/RowOpenButton'
+import { companyHref, countryName, fetchCountriesFunnel } from '../lib/companies'
+import type { FacetOption } from '../lib/companies'
 import type {
   CoachingDigest, Gender, Lead, LeadsSearchItem, LeadsSearchPage, ReplyIntent, Sentiment,
 } from '../lib/types'
@@ -91,8 +93,12 @@ const isSentFilter = (v: string | null): v is SentFilter =>
  * immediate — they are visibly set and have their own controls. */
 const SHEET_FILTER_KEYS = [
   'camp', 'stage', 'risk', 'pipe', 'who', 'follow', 'replied', 'intent',
-  'gender', 'agebucket',
+  'gender', 'agebucket', 'country',
 ] as const
+
+/* `country` is ISO alpha-2 or `unknown`; anything else in a URL is ignored. */
+const readCountry = (value: string | null): string =>
+  value && /^([A-Z]{2}|unknown)$/.test(value) ? value : 'all'
 
 // The "replied within" window options (days). '' / absent = any time.
 const REPLIED_DAYS = new Set(['7', '30', '90'])
@@ -126,6 +132,7 @@ export function LeadsExplorer() {
   const genderF = params.get('gender') ?? 'all'
   const ageF = params.get('agebucket') ?? 'all'
   const followF = params.get('follow') ?? 'all'
+  const countryF = readCountry(params.get('country'))
   const q = params.get('q') ?? ''
 
   // Reply filters (folded in from the old Replies page): a sentiment bucket and
@@ -230,9 +237,10 @@ export function LeadsExplorer() {
     today: businessDateKey(),
     page,
     pageSize: PAGE_SIZE,
+    country: countryF,
   }), [
     inst, effCamp, stage, risk, pipe, who, genderF, ageF, followF, repliedSince,
-    sent, intent, q, sortKey, sortAsc, page,
+    sent, intent, q, sortKey, sortAsc, page, countryF,
   ])
 
   useEffect(() => {
@@ -286,9 +294,26 @@ export function LeadsExplorer() {
     setParams(new URLSearchParams(), { replace: true })
   }
 
+  /* The country options are the lead countries with their people counts, read
+   * the first time the sheet opens rather than on every page load. */
+  const [countryOptions, setCountryOptions] = useState<FacetOption[] | null>(null)
+  const loadCountryOptions = () => {
+    if (countryOptions) return
+    setCountryOptions([])
+    fetchCountriesFunnel({ axis: 'lead' })
+      .then((funnel) => setCountryOptions(funnel.rows
+        .filter((row) => row.people > 0)
+        .map((row) => ({ value: row.iso2 ?? 'unknown', label: row.iso2 ? row.name : 'Unknown', count: row.people }))))
+      .catch(() => setCountryOptions(null))
+  }
+
   const openFilters = () => {
+    loadCountryOptions()
     setFilterDraft(Object.fromEntries(
-      SHEET_FILTER_KEYS.map((key) => [key, key === 'pipe' ? pipe : params.get(key) ?? 'all']),
+      SHEET_FILTER_KEYS.map((key) => [
+        key,
+        key === 'pipe' ? pipe : key === 'country' ? countryF : params.get(key) ?? 'all',
+      ]),
     ))
   }
   const setDraftFilter = (key: string, value: string) => {
@@ -338,6 +363,10 @@ export function LeadsExplorer() {
         ]),
     )
   }, [serverPage])
+  // The Airtable company each row's person is written to for, by lead id.
+  const companyLinks = useMemo(() => new Map(
+    (serverPage?.items ?? []).flatMap((item) => item.company_link ? [[item.lead.id, item.company_link] as const] : []),
+  ), [serverPage])
   const followUps = useMemo(() => {
     return followUpStateMap(
       (serverPage?.items ?? []).flatMap((item) => item.followUp ? [item.followUp] : []),
@@ -466,15 +495,17 @@ export function LeadsExplorer() {
   const dateColumns = DATE_COLUMNS.filter(
     (c) => (!c.optional || showAdded) && (showDetailColumns || !c.detail),
   )
-  // Lead, Account / campaign, Milestone, Pipeline, Next follow-up + the date
-  // columns, plus Headline / Age / Gender when the detail columns are shown.
-  const colSpan = 6 + (showDetailColumns ? 3 : 0) + dateColumns.length
+  // Lead, Reply, Company, Country, Account / campaign, Milestone, Pipeline, Next
+  // follow-up + the date columns, plus Headline / Age / Gender when the detail
+  // columns are shown.
+  const colSpan = 8 + (showDetailColumns ? 3 : 0) + dateColumns.length
 
   /* How many of the sheet's filters are engaged. The search box and the account
    * selector are on the page and visibly set, so they are not counted here. */
   const sheetFilterCount = [
     effCamp !== 'all', stage !== 'all', risk !== 'all', pipe !== 'all', who !== 'all',
     followF !== 'all', repliedDays > 0, intent != null, genderF !== 'all', ageF !== 'all',
+    countryF !== 'all',
   ].filter(Boolean).length
   /* What the sheet's footer counts while it is open: the draft, not the URL. */
   const draftFilterCount = filterDraft
@@ -533,6 +564,12 @@ export function LeadsExplorer() {
       label: `Age: ${AGE_BUCKETS.find((b) => b.id === ageF)?.label ?? ageF}`,
       onClear: () => setFilter('agebucket', 'all'),
     })
+  if (countryF !== 'all')
+    activeFilters.push({
+      id: 'country',
+      label: `Country: ${countryF === 'unknown' ? 'Unknown' : countryName(countryF) ?? countryF}`,
+      onClear: () => setFilter('country', 'all'),
+    })
   if (followF !== 'all')
     activeFilters.push({
       id: 'follow',
@@ -582,6 +619,8 @@ export function LeadsExplorer() {
     setExporting(true)
     try {
       const items: LeadsSearchItem[] = []
+      const exportLinks = new Map<string, NonNullable<LeadsSearchItem['company_link']>>()
+      const companyLinkOf = (id: string) => exportLinks.get(id)
       const exportPageSize = 1_000
       const pageCount = Math.ceil(resultCount / exportPageSize)
       for (let exportPage = 0; exportPage < pageCount; exportPage++) {
@@ -591,6 +630,7 @@ export function LeadsExplorer() {
           pageSize: exportPageSize,
         })
         items.push(...result.items)
+        for (const item of result.items) if (item.company_link) exportLinks.set(item.lead.id, item.company_link)
       }
 
       downloadCsv(
@@ -600,6 +640,9 @@ export function LeadsExplorer() {
           profile_url: l.profile_url,
           headline: l.headline,
           company: l.company,
+          airtable_company: companyLinkOf(l.id)?.name ?? null,
+          location: l.location ?? null,
+          country: l.country_code ?? null,
           campaign: campaignName(l.campaign_id),
           instance: instanceLabel(l.instance_id),
           stage: stageOf(l),
@@ -746,6 +789,22 @@ export function LeadsExplorer() {
                 <option key={b.id} value={b.id}>{b.label}</option>
               ))}
             </SelectField>
+            <SelectField
+              label="Country"
+              help="Where the lead is, from their LinkedIn location."
+              value={filterDraft.country}
+              onChange={(e) => setDraftFilter('country', e.target.value)}
+            >
+              <option value="all">Any country</option>
+              {filterDraft.country !== 'all' && !countryOptions?.some((o) => o.value === filterDraft.country) && (
+                <option value={filterDraft.country}>
+                  {filterDraft.country === 'unknown' ? 'Unknown' : countryName(filterDraft.country) ?? filterDraft.country}
+                </option>
+              )}
+              {(countryOptions ?? []).map((o) => (
+                <option key={o.value} value={o.value}>{o.label} ({num(o.count)})</option>
+              ))}
+            </SelectField>
           </div>
         </FilterDialog>
       )}
@@ -850,6 +909,8 @@ export function LeadsExplorer() {
             <tr>
               {sortHeader('full_name', 'Lead')}
               <th scope="col">Reply</th>
+              <th scope="col">Company</th>
+              <th scope="col">Country</th>
               {showDetailColumns && <th scope="col">Headline</th>}
               <th scope="col">Account / campaign</th>
               <th scope="col">Milestone</th>
@@ -869,6 +930,7 @@ export function LeadsExplorer() {
                 leadKey(l.instance_id, l.profile_url),
               )?.highest
               const followState = followUps.get(followUpKey(l.instance_id, l.profile_url))
+              const companyLink = companyLinks.get(l.id)
               const name = l.full_name || 'lead'
               return (
               <tr
@@ -889,6 +951,23 @@ export function LeadsExplorer() {
                       <LeadReplyBadges reply={reply} highestIntent={reachedIntent} />
                     </div>
                   ) : <span className="text-app-text-muted">—</span>}
+                </td>
+                <td className="max-w-[220px]" onClick={companyLink ? (e) => e.stopPropagation() : undefined}>
+                  {companyLink ? (
+                    <Link
+                      className="relative z-10 block truncate text-app-text no-underline hover:text-app-accent hover:underline"
+                      to={companyHref(companyLink)}
+                      title={companyLink.name ?? undefined}
+                    >
+                      {companyLink.name || 'Airtable company'}
+                    </Link>
+                  ) : <span className="text-app-text-muted">—</span>}
+                  {l.company && (
+                    <div className="truncate text-app-meta text-app-text-muted" title={`LinkedIn: ${l.company}`}>{l.company}</div>
+                  )}
+                </td>
+                <td className="whitespace-nowrap" title={l.location ?? undefined}>
+                  {l.country_code ? countryName(l.country_code) : <span className="text-app-text-muted">—</span>}
                 </td>
                 {showDetailColumns && (
                   <td className="max-w-[240px] truncate text-app-text-muted" title={l.headline ?? ''}>{l.headline ?? '—'}</td>
