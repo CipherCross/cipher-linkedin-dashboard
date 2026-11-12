@@ -277,6 +277,11 @@ export interface LeadsSearchPageParams {
   readonly today: string
   readonly pageSize: string
   readonly page: string
+  /** ISO alpha-2 of the lead's own location, or `unknown` for an unresolved one. */
+  readonly country: string | null
+  /** The linked Airtable company (ledger step 030): base key and record id. */
+  readonly companyBase: string | null
+  readonly companyRecordId: string | null
   readonly [key: string]: string | null
 }
 
@@ -350,6 +355,10 @@ const LEADS_SEARCH_PAGE_SQL = `WITH latest_inbound AS (
          s.updated_at AS follow_up_updated_at,
          s.updated_by AS follow_up_updated_by,
          s.archived_at AS follow_up_archived_at,
+         lk.base_key AS link_base_key,
+         lk.company_record_id AS link_record_id,
+         lk.method AS link_method,
+         lc.name AS link_company_name,
          CASE
            WHEN l.replied_at IS NOT NULL THEN 'replied'
            WHEN l.connected_at IS NOT NULL THEN 'accepted'
@@ -370,6 +379,10 @@ const LEADS_SEARCH_PAGE_SQL = `WITH latest_inbound AS (
       ON ri.instance_id = l.instance_id AND ri.profile_url = l.profile_url
     LEFT JOIN public.conversation_follow_up_state s
       ON s.instance_id = l.instance_id AND s.profile_url = l.profile_url
+    LEFT JOIN public.lead_company_links lk
+      ON lk.instance_id = l.instance_id AND lk.profile_url = l.profile_url
+    LEFT JOIN public.airtable_companies lc
+      ON lc.base_key = lk.base_key AND lc.record_id = lk.company_record_id
 ), base AS (
   SELECT j.*
     FROM joined j
@@ -413,8 +426,15 @@ const LEADS_SEARCH_PAGE_SQL = `WITH latest_inbound AS (
      )
      AND (
        $13::text IS NULL
-       OR lower(concat_ws(' ', j.full_name, j.headline, j.company)) LIKE '%' || lower($13::text) || '%'
+       OR lower(concat_ws(' ', j.full_name, j.headline, j.company, j.link_company_name)) LIKE '%' || lower($13::text) || '%'
      )
+     AND (
+       $19::text IS NULL
+       OR ($19::text = 'unknown' AND j.country_code IS NULL)
+       OR j.country_code::text = $19::text
+     )
+     AND ($20::text IS NULL OR j.link_base_key = $20::text)
+     AND ($21::text IS NULL OR j.link_record_id = $21::text)
 ), reply_base AS (
   SELECT b.*
     FROM base b
@@ -476,7 +496,8 @@ SELECT jsonb_build_object(
         'latest_reply_intent_reason', 'highest_intent', 'next_follow_up_date',
         'follow_up_owner_id', 'follow_up_revision', 'follow_up_last_event_id',
         'follow_up_last_mutation_id', 'follow_up_created_at', 'follow_up_updated_at',
-        'follow_up_updated_by', 'follow_up_archived_at', 'page_order'
+        'follow_up_updated_by', 'follow_up_archived_at', 'page_order',
+        'link_base_key', 'link_record_id', 'link_method', 'link_company_name'
       ]::text[],
       'reply', CASE WHEN p.latest_reply_id IS NULL THEN NULL ELSE jsonb_build_object(
         'body', p.latest_reply_body,
@@ -500,6 +521,12 @@ SELECT jsonb_build_object(
         'updated_at', p.follow_up_updated_at,
         'updated_by', p.follow_up_updated_by,
         'archived_at', p.follow_up_archived_at
+      ) END,
+      'company_link', CASE WHEN p.link_record_id IS NULL THEN NULL ELSE jsonb_build_object(
+        'base_key', p.link_base_key,
+        'record_id', p.link_record_id,
+        'name', p.link_company_name,
+        'method', p.link_method
       ) END
     ) ORDER BY p.page_order)
       FROM paged p
@@ -537,6 +564,9 @@ export const leadsSearchPageOperation: NeonQueryOperation<
       params?.today ?? null,
       params?.pageSize ?? '50',
       params?.page ?? '0',
+      params?.country ?? null,
+      params?.companyBase ?? null,
+      params?.companyRecordId ?? null,
     ],
   }),
   mapRow: (row: NeonRow): LeadsSearchPageRow => {

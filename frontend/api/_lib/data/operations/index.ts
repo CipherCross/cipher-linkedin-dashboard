@@ -119,6 +119,15 @@ import {
   registerAirtableMirrorOperations,
 } from './airtableMirror.js'
 import {
+  COMPANIES_OPERATIONS,
+  COUNTRIES_OPERATIONS,
+  companiesSearchPageOperation,
+  companiesUnlinkedOperation,
+  companyDetailOperation,
+  countriesFunnelOperation,
+  leadCompanyLinkOperation,
+} from './companies.js'
+import {
   LEADS_OPERATIONS,
   leadNotesOperation,
   leadPhotoObjectsOperation,
@@ -282,6 +291,14 @@ export {
   type SequencePublishJobRow,
   type SequencePublishTargetRow,
 } from './sequencePublishing.js'
+export {
+  COMPANIES_OPERATIONS,
+  COUNTRIES_OPERATIONS,
+  type CompaniesSearchPageParams,
+  type CompaniesUnlinkedParams,
+  type CountriesFunnelParams,
+  type LeadCompanyLinkRow,
+} from './companies.js'
 export {
   LEADS_OPERATIONS,
   type LeadNoteRow,
@@ -563,6 +580,13 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   // The full-snapshot base-table walks plus the route-owned Leads page.
   registry.registerQuery(LEADS_OPERATIONS.directory, leadsDirectoryOperation)
   registry.registerQuery(LEADS_OPERATIONS.searchPage, leadsSearchPageOperation)
+  // The Companies page (ledger step 030): Airtable companies, their funnel, and
+  // the per-country funnel. Read-only, like every query here.
+  registry.registerQuery(COMPANIES_OPERATIONS.searchPage, companiesSearchPageOperation)
+  registry.registerQuery(COMPANIES_OPERATIONS.detail, companyDetailOperation)
+  registry.registerQuery(COMPANIES_OPERATIONS.unlinked, companiesUnlinkedOperation)
+  registry.registerQuery(COMPANIES_OPERATIONS.leadLink, leadCompanyLinkOperation)
+  registry.registerQuery(COUNTRIES_OPERATIONS.funnel, countriesFunnelOperation)
   registry.registerQuery(
     MESSAGES_OPERATIONS.inboundHistory,
     inboundHistoryOperation,
@@ -1010,6 +1034,11 @@ export const APPLICATION_QUERY_OPERATIONS = [
   DASHBOARD_OPERATIONS.annotationsTimeline,
   LEADS_OPERATIONS.directory,
   LEADS_OPERATIONS.searchPage,
+  COMPANIES_OPERATIONS.searchPage,
+  COMPANIES_OPERATIONS.detail,
+  COMPANIES_OPERATIONS.unlinked,
+  COMPANIES_OPERATIONS.leadLink,
+  COUNTRIES_OPERATIONS.funnel,
   MESSAGES_OPERATIONS.inboundHistory,
   MESSAGES_OPERATIONS.outboundRecent,
   PIPELINE_OPERATIONS.eventLog,

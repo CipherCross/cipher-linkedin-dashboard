@@ -71,7 +71,9 @@ import {
   ACTIVITY_OPERATIONS,
   AI_WRITE_OPERATIONS,
   COACHING_OPERATIONS,
+  COMPANIES_OPERATIONS,
   CONVERSATION_OPERATIONS,
+  COUNTRIES_OPERATIONS,
   DASHBOARD_OPERATIONS,
   IDENTITY_OPERATIONS,
   LEADS_OPERATIONS,
@@ -100,6 +102,13 @@ import {
   leadsDirectoryOperation,
   leadsSearchPageOperation,
 } from '../api/_lib/data/operations/leads.js'
+import {
+  companiesSearchPageOperation,
+  companiesUnlinkedOperation,
+  companyDetailOperation,
+  countriesFunnelOperation,
+  leadCompanyLinkOperation,
+} from '../api/_lib/data/operations/companies.js'
 import {
   inboundHistoryOperation,
   outboundRecentOperation,
@@ -189,6 +198,11 @@ const READ_SLICE = [
   [DASHBOARD_OPERATIONS.annotationsTimeline, annotationsTimelineOperation],
   [LEADS_OPERATIONS.directory, leadsDirectoryOperation],
   [LEADS_OPERATIONS.searchPage, leadsSearchPageOperation],
+  [COMPANIES_OPERATIONS.searchPage, companiesSearchPageOperation],
+  [COMPANIES_OPERATIONS.detail, companyDetailOperation],
+  [COMPANIES_OPERATIONS.unlinked, companiesUnlinkedOperation],
+  [COMPANIES_OPERATIONS.leadLink, leadCompanyLinkOperation],
+  [COUNTRIES_OPERATIONS.funnel, countriesFunnelOperation],
   [MESSAGES_OPERATIONS.inboundHistory, inboundHistoryOperation],
   [MESSAGES_OPERATIONS.outboundRecent, outboundRecentOperation],
   [PIPELINE_OPERATIONS.eventLog, pipelineEventLogOperation],
@@ -270,10 +284,15 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
       'campaigns.sequenceSteps',
       'coach.playbook',
       'coaching.digests',
+      'companies.detail',
+      'companies.leadLink',
+      'companies.searchPage',
+      'companies.unlinked',
       'conversations.followUpHistory',
       'conversations.followUpState',
       'conversations.latestMessage',
       'conversations.replyIntent',
+      'countries.funnel',
       'dashboard.bootstrap',
       'dashboard.routeSnapshot',
       'hypotheses.campaigns',
@@ -651,6 +670,21 @@ describe('the server-side Leads explorer', () => {
     expect(sql).toContain('row_number() over')
     expect(sql).toContain('page_order > ($18::int * $17::int)')
     expect(sql).not.toContain('conversation_reply_intent')
+  })
+
+  it('filters by lead country and linked company before pagination and returns the link', () => {
+    const sql = sqlOf(inspectable(leadsSearchPageOperation)).toLowerCase()
+    expect(sql).toContain('left join public.lead_company_links lk')
+    expect(sql).toContain("($19::text = 'unknown' and j.country_code is null)")
+    expect(sql).toContain('j.link_base_key = $20::text')
+    expect(sql).toContain('j.link_record_id = $21::text')
+    expect(sql).toContain("'company_link'")
+    // The link columns ride on the item, not on the lead object.
+    expect(sql).toContain("'link_base_key', 'link_record_id', 'link_method', 'link_company_name'")
+    const statement = leadsSearchPageOperation.build({
+      params: { country: 'US', companyBase: 'web2mob', companyRecordId: 'recAAAAAAAAAAAAAA' },
+    } as never)
+    expect(statement.values?.slice(18)).toEqual(['US', 'web2mob', 'recAAAAAAAAAAAAAA'])
   })
 })
 

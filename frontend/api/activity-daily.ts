@@ -71,7 +71,9 @@ import {
   ACTIVITY_OPERATIONS,
   AI_WRITE_OPERATIONS,
   COACHING_OPERATIONS,
+  COMPANIES_OPERATIONS,
   CONVERSATION_OPERATIONS,
+  COUNTRIES_OPERATIONS,
   DASHBOARD_OPERATIONS,
   IDENTITY_OPERATIONS,
   LEADS_OPERATIONS,
@@ -91,6 +93,7 @@ import {
   type ReplyReferences,
 } from './_lib/replyReview.js'
 import { REPLY_REVIEW_OPERATIONS, type ReplyThreadContext } from './_lib/data/operations/replyReviews.js'
+import { COMPANY_SIZE_BUCKETS, COMPANY_SORT_KEYS } from './_lib/data/operations/companies.js'
 import { getDataStore } from './_lib/data/store.js'
 import {
   collectDataStoreStages,
@@ -942,6 +945,30 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
     operation: LEADS_OPERATIONS.searchPage,
     params: readLeadsSearch,
   },
+
+  // --- the Companies page (ledger step 030) ---------------------------------
+  // Not tolerant: each is a funnel read behind its own error state, and step
+  // 030 is part of the baseline, so an absent relation is a broken deployment.
+  [COMPANIES_OPERATIONS.searchPage]: {
+    operation: COMPANIES_OPERATIONS.searchPage,
+    params: readCompaniesSearch,
+  },
+  [COMPANIES_OPERATIONS.detail]: {
+    operation: COMPANIES_OPERATIONS.detail,
+    params: readCompanyDetail,
+  },
+  [COMPANIES_OPERATIONS.unlinked]: {
+    operation: COMPANIES_OPERATIONS.unlinked,
+    params: readCompaniesUnlinked,
+  },
+  [COMPANIES_OPERATIONS.leadLink]: {
+    operation: COMPANIES_OPERATIONS.leadLink,
+    params: (url) => readConversation(url),
+  },
+  [COUNTRIES_OPERATIONS.funnel]: {
+    operation: COUNTRIES_OPERATIONS.funnel,
+    params: readCountriesFunnel,
+  },
   [MESSAGES_OPERATIONS.inboundHistory]: {
     operation: MESSAGES_OPERATIONS.inboundHistory,
     // Deliberately not `ranged`, and this one is an invariant rather than a
@@ -1306,6 +1333,106 @@ function readLeadsSearch(url: URL): DataStoreParams {
     today,
     pageSize: readPageInteger(url, 'page_size', 50, 1_000),
     page: readPageInteger(url, 'page', 0, 100_000),
+    country: readOptionalCountry(url),
+    companyBase: readOptionalBaseKey(url, 'company_base'),
+    companyRecordId: readOptionalRecordId(url, 'company_record_id'),
+  }
+}
+
+// --- the Companies page's parameter readers ---------------------------------
+// Exported for `tests/companiesReads.test.ts`: what each accepts and refuses is
+// the endpoint's contract, provable without a database.
+
+const ISO2_PATTERN = /^[A-Z]{2}$/
+/** `airtable_companies.base_key`'s own CHECK, so a bad key is a 400 not a miss. */
+const BASE_KEY_PATTERN = /^[a-z0-9_]{1,40}$/
+/** An Airtable record id, as the step 030 CHECK constraints spell it. */
+const RECORD_ID_PATTERN = /^rec[A-Za-z0-9]{14}$/
+
+/** ISO alpha-2 (case-insensitive) or `unknown` — the NULL-country bucket. */
+export function readOptionalCountry(url: URL, name = 'country'): string | null {
+  const raw = (url.searchParams.get(name) ?? '').trim()
+  if (raw === '' || raw === 'all') return null
+  if (raw.toLowerCase() === 'unknown') return 'unknown'
+  const code = raw.toUpperCase()
+  if (!ISO2_PATTERN.test(code)) {
+    throw new BadRequest(`${name} must be an ISO 3166 alpha-2 code or unknown`)
+  }
+  return code
+}
+
+export function readOptionalBaseKey(url: URL, name = 'base'): string | null {
+  const raw = (url.searchParams.get(name) ?? '').trim()
+  if (raw === '' || raw === 'all') return null
+  if (!BASE_KEY_PATTERN.test(raw)) throw new BadRequest(`${name} is not a base key`)
+  return raw
+}
+
+export function readOptionalRecordId(url: URL, name: string): string | null {
+  const raw = (url.searchParams.get(name) ?? '').trim()
+  if (raw === '') return null
+  if (!RECORD_ID_PATTERN.test(raw)) throw new BadRequest(`${name} is not an Airtable record id`)
+  return raw
+}
+
+export function readCompaniesSearch(url: URL): DataStoreParams {
+  // Not `readOptionalEnum`: it reads `all` as "no filter", and here `all` is a
+  // value of its own — every synced company, linked or not.
+  const scope = (url.searchParams.get('scope') ?? '').trim() || 'linked'
+  if (scope !== 'linked' && scope !== 'all') throw new BadRequest('scope is not an allowed value')
+  return {
+    scope,
+    instanceId: readOptionalInstance(url),
+    query: readOptionalSearch(url),
+    country: readOptionalCountry(url),
+    industry: readOptionalBoundedText(url, 'industry'),
+    size: readOptionalEnum(url, 'size', [...COMPANY_SIZE_BUCKETS]),
+    approveStatus: readOptionalBoundedText(url, 'approve'),
+    base: readOptionalBaseKey(url),
+    hasReply: readOptionalEnum(url, 'reply', ['yes', 'no']),
+    sort: readOptionalEnum(url, 'sort', [...COMPANY_SORT_KEYS]) ?? 'leads',
+    direction: readOptionalEnum(url, 'dir', ['asc', 'desc']) ?? 'desc',
+    pageSize: readPageInteger(url, 'page_size', 50, 200),
+    page: readPageInteger(url, 'page', 0, 100_000),
+  }
+}
+
+export function readCompanyDetail(url: URL): DataStoreParams {
+  const base = readOptionalBaseKey(url)
+  if (base === null) throw new BadRequest('base is required')
+  const recordId = readOptionalRecordId(url, 'record_id')
+  if (recordId === null) throw new BadRequest('record_id is required')
+  return { base, recordId }
+}
+
+export function readCompaniesUnlinked(url: URL): DataStoreParams {
+  return {
+    instanceId: readOptionalInstance(url),
+    query: readOptionalSearch(url),
+    reach: readOptionalEnum(url, 'reach', ['invited', 'replied']),
+    pageSize: readPageInteger(url, 'page_size', 50, 200),
+    page: readPageInteger(url, 'page', 0, 100_000),
+  }
+}
+
+/**
+ * `invited_from` / `invited_to` are UTC days, inclusive at both ends as the
+ * page shows them; the operation receives the half-open instants
+ * `dayRangeToUtcRange` already produces for `from`/`to`.
+ */
+export function readCountriesFunnel(url: URL): DataStoreParams {
+  const from = readDay(url.searchParams.get('invited_from'), 'invited_from')
+  const to = readDay(url.searchParams.get('invited_to'), 'invited_to')
+  if (from !== null && to !== null && from > to) {
+    throw new BadRequest('invited_from must not be after invited_to')
+  }
+  const range = dayRangeToUtcRange(from, to)
+  return {
+    axis: readOptionalEnum(url, 'axis', ['lead', 'company']) ?? 'lead',
+    instanceId: readOptionalInstance(url),
+    campaignId: readOptionalBoundedText(url, 'camp'),
+    invitedFrom: range?.fromInclusive ?? null,
+    invitedTo: range?.toExclusive ?? null,
   }
 }
 
