@@ -194,8 +194,8 @@ describe('the Companies operations', () => {
 describe('the Airtable sync loop', () => {
   const round = (done: boolean, upserted: number, error?: string): AirtableSyncRound => ({
     done,
-    bases: [{ base: 'web2mob', companies: { upserted, done }, contacts: { upserted: upserted * 2, done }, ...(error ? { error } : {}) }],
-    links: { leads: 100, matched: 87, changed: upserted },
+    bases: [{ base: 'web2mob', configured: true, companies: { upserted, done }, contacts: { upserted: upserted * 2, done }, ...(error ? { error } : {}) }],
+    links: { leads: 100, matched: 87, changed: upserted, linked: 87 },
   })
 
   it('repeats while the server says it is not done, and sums the rounds', async () => {
@@ -209,7 +209,7 @@ describe('the Airtable sync loop', () => {
     expect(seen).toEqual([1, 2, 3])
     expect(summary).toEqual({
       rounds: 3, done: true, companies: 16, contacts: 32,
-      links: { leads: 100, matched: 87, changed: 1 }, errors: [],
+      links: { leads: 100, matched: 87, changed: 1, linked: 87 }, errors: [],
     })
   })
 
