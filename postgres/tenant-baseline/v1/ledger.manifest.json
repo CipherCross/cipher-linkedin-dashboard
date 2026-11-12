@@ -335,7 +335,7 @@
     {
       "step": 30,
       "artifact": "030_companies_countries.sql",
-      "sha256": "727d4412db1792ee7eb929757a24873acb29c8382b54e1787562ce23d2486d65",
+      "sha256": "7d0671f09e8e4a2db81ef58972e81c8d4a03e3f42f626bb27b0674c00dd4ed53",
       "owner_role_entered_by": "artifact",
       "session": "companies-countries",
       "description": "Adds countries and country_aliases (ISO reference data and LinkedIn/Airtable spellings, seeded) with geo_country_code(text); leads.location and leads.country_code (trigger-derived from location); airtable_companies and airtable_contacts (a mirror of every base's Companies and Contacts tables, typed columns plus every field as jsonb, country_code trigger-derived from hq_country); lead_company_links (a lead's Airtable company, by contact slug or set by hand; manual links survive refresh) and airtable_sync_state (incremental cursor and resumable offset). Members write the mirror and links through RLS (app_runtime), the daily cron through app_system under the system actor; members may DELETE only a manual link; no other DELETE; the AI sandbox reads every new relation."

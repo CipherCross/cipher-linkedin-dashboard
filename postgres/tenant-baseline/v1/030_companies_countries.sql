@@ -10,6 +10,8 @@
 --   whole string, then each comma segment right to left, each also with
 --   "Greater ..." / "... Area" / "... Metropolitan Area" / "... Region"
 --   stripped. NULL when nothing matches; a later step adds aliases.
+--   linkedin_slug(text) is the profile-URL normalization the lead <-> contact
+--   match uses on both sides.
 -- * leads.location (LH2's location, delivered by the agent for every lead)
 --   and leads.country_code, kept in step with location by a trigger.
 -- * airtable_companies / airtable_contacts: a mirror of the Airtable Companies
@@ -994,6 +996,51 @@ begin
 end;
 $$;
 
+-- A LinkedIn profile URL to its lower-case, percent-decoded public slug
+-- ("https://www.linkedin.com/in/J%C3%B6rg-X/" -> "jörg-x"), or NULL. The one
+-- normalization both sides of the lead <-> Airtable contact match use; same
+-- rule as analysis/outreach-insights/enrich.py slug().
+CREATE FUNCTION public.linkedin_slug(p_url text) RETURNS text
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+declare
+  raw text;
+  bytes bytea := ''::bytea;
+  token text;
+  decoded text;
+  matched text[];
+begin
+  if p_url is null then
+    return null;
+  end if;
+  raw := btrim(p_url);
+  if raw = '' or char_length(raw) > 1000 then
+    return null;
+  end if;
+  decoded := raw;
+  if raw ~ '%[0-9A-Fa-f]{2}' then
+    begin
+      for token in select m[1] from regexp_matches(raw, '(%[0-9A-Fa-f]{2}|[^%]+|%)', 'g') as m loop
+        if token ~ '^%[0-9A-Fa-f]{2}$' then
+          bytes := bytes || decode(substr(token, 2), 'hex');
+        else
+          bytes := bytes || convert_to(token, 'UTF8');
+        end if;
+      end loop;
+      decoded := convert_from(bytes, 'UTF8');
+    exception when others then
+      decoded := raw;
+    end;
+  end if;
+  matched := regexp_match(lower(decoded), 'linkedin\.com/(?:in|pub)/([^/?#[:space:]]+)');
+  if matched is null then
+    return null;
+  end if;
+  return nullif(btrim(matched[1], '/'), '');
+end;
+$$;
+
 CREATE FUNCTION public.refresh_lead_country_code() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO ''
@@ -1225,9 +1272,12 @@ GRANT SELECT, INSERT, UPDATE ON TABLE
 GRANT DELETE ON TABLE public.lead_company_links TO app_runtime;
 
 REVOKE ALL ON FUNCTION public.geo_country_code(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.linkedin_slug(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.refresh_lead_country_code() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.refresh_airtable_company_country_code() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.geo_country_code(text)
     TO app_runtime, app_readonly, app_machine, app_system, app_ai_runner;
+GRANT EXECUTE ON FUNCTION public.linkedin_slug(text)
+    TO app_runtime, app_readonly, app_system, app_ai_runner;
 
 RESET ROLE;
