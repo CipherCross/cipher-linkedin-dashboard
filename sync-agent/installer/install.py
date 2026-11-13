@@ -25,7 +25,7 @@ import tempfile
 import time
 import urllib.request
 from dataclasses import dataclass
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Iterable, Optional, Sequence
 
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -93,7 +93,9 @@ WINDOWS_PROFILES = (
 )
 
 
-CommandRunner = Callable[[Sequence[str], pathlib.Path | None, int | None], CommandResult]
+# A runtime alias, so it cannot use `X | None` (evaluated eagerly, Python 3.10+);
+# annotations elsewhere are deferred by `from __future__ import annotations`.
+CommandRunner = Callable[[Sequence[str], Optional[pathlib.Path], Optional[int]], CommandResult]
 
 
 def default_install_root(

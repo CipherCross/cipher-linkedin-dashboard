@@ -895,7 +895,10 @@ Python     54321 mykytashevchenko   10u  IPv4 0xbc7607a4eaadf109      0t0  TCP 1
             "capability_snapshot": {}, "compatible": True,
             "error_code": None,
         }
-        with mock.patch.object(agent, "probe_linked_helper_runtime", return_value=runtime):
+        # No LH2 database on the machine running the test: on an operator Mac with
+        # Linked Helper installed, discovery would find a real, complete schema.
+        with mock.patch.object(agent, "probe_linked_helper_runtime", return_value=runtime), \
+             mock.patch.object(agent, "discover_db_path", side_effect=RuntimeError("no LH2 here")):
             result = agent.probe_linked_helper({"instance_id": "notebook-1",
                                                 "lh2_publish": profile})
         snapshot = result["runtime_snapshot"]
